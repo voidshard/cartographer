@@ -38,16 +38,14 @@ type Landscape struct {
 // Area represents a specific small area of the map
 type Area struct {
 	// 0-255, where higher is more/higher/better
-	Height     uint8
-	Rainfall   uint8
-	Vegetation uint8
+	Height      uint8
+	Rainfall    uint8
+	Vegetation  uint8
+	Temperature uint8 // in degress c, offset so 100 => 0 degrees cel
 
 	// if the square contains fresh/salt water
 	Sea   bool
 	River bool
-
-	// in degrees Cel.
-	Temperature int
 }
 
 // Dimensions returns the width & height of each map in pixels.
@@ -68,7 +66,7 @@ func (l *Landscape) At(x, y int) *Area {
 		Vegetation:  l.vegetation.Value(x, y),
 		Sea:         l.sea.Value(x, y) == 255,
 		River:       l.rivers.Value(x, y) == 255,
-		Temperature: int(l.temperature.Value(x, y)) - 100,
+		Temperature: l.temperature.Value(x, y),
 	}
 }
 
