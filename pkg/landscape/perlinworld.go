@@ -45,14 +45,11 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	}()
 	wg.Wait()
 
-	vege := determineVegetation(sea, rvrs, temp, rain, cfg.Vegetation)
-
 	return &Landscape{
 		height:      hmap,
 		sea:         sea,
 		rivers:      rvrs,
 		temperature: temp,
 		rainfall:    rain,
-		vegetation:  vege,
 	}, nil
 }

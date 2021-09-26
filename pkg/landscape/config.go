@@ -6,12 +6,11 @@ type Config struct {
 	// base map height
 	Height uint
 
-	Rain       *rainfallSettings
-	Vegetation *vegetationSettings
-	Temp       *tempSettings
-	Rivers     *riverSettings
-	Land       *landSettings
-	Sea        *seaSettings
+	Rain   *rainfallSettings
+	Temp   *tempSettings
+	Rivers *riverSettings
+	Land   *landSettings
+	Sea    *seaSettings
 }
 
 // tempSettings
@@ -19,17 +18,11 @@ type tempSettings struct {
 	// in c, where 100 => 0c
 	EquatorAverageTemp uint8
 	PoleAverageTemp    uint8
+	EquatorWidth       float64
 }
 
 type rainfallSettings struct {
 	RainfallVariance float64
-}
-
-type vegetationSettings struct {
-	TempMin uint8
-	TempMax uint8
-	RainMin uint8
-	RainMax uint8
 }
 
 type riverSettings struct {
@@ -67,15 +60,10 @@ func DefaultConfig() *Config {
 		Rain: &rainfallSettings{
 			RainfallVariance: 0.03,
 		},
-		Vegetation: &vegetationSettings{
-			TempMin: 101,
-			TempMax: 150,
-			RainMin: 50,
-			RainMax: 255,
-		},
 		Temp: &tempSettings{
-			EquatorAverageTemp: 140, // 40c
-			PoleAverageTemp:    60,  // -40c
+			EquatorAverageTemp: 140,  // 40c
+			PoleAverageTemp:    60,   // -40c
+			EquatorWidth:       0.05, // % of height
 		},
 		Rivers: &riverSettings{
 			Number:                  1,

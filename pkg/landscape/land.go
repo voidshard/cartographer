@@ -27,12 +27,6 @@ type Landscape struct {
 	// map of average rainfall .. unsure on exactly what this means ..
 	// but higher values imply more regular / more rain
 	rainfall *MapImage
-
-	// map of expected vegetation, where higher numbers indicated
-	// increasingly more lush vegetation.
-	// Values of 0 indicate barren desert, tundra, ice or similarly
-	// vegetation poor (or utterly lifeless) areas.
-	vegetation *MapImage
 }
 
 // Area represents a specific small area of the map
@@ -40,7 +34,6 @@ type Area struct {
 	// 0-255, where higher is more/higher/better
 	Height      uint8
 	Rainfall    uint8
-	Vegetation  uint8
 	Temperature uint8 // in degress c, offset so 100 => 0 degrees cel
 
 	// if the square contains fresh/salt water
@@ -63,7 +56,6 @@ func (l *Landscape) At(x, y int) *Area {
 	return &Area{
 		Height:      l.height.Value(x, y),
 		Rainfall:    l.rainfall.Value(x, y),
-		Vegetation:  l.vegetation.Value(x, y),
 		Sea:         l.sea.Value(x, y) == 255,
 		River:       l.rivers.Value(x, y) == 255,
 		Temperature: l.temperature.Value(x, y),
@@ -84,7 +76,6 @@ func (w *Landscape) DebugRender() (string, error) {
 		{"rivers.png", w.rivers},
 		{"temperature.png", w.temperature},
 		{"rainfall.png", w.rainfall},
-		{"vegetation.png", w.vegetation},
 	} {
 		err := savePng(filepath.Join(d, i.Name), i.Img)
 		if err != nil {

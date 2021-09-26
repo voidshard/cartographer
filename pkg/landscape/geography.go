@@ -11,33 +11,6 @@ func determineRainfall(hmap *MapImage, rs *rainfallSettings) *MapImage {
 	return &MapImage{im: perlin.Perlin(x, y, rs.RainfallVariance)}
 }
 
-// determineVegetation picks out where forests should be.
-// - not in sea
-// - not in rivers
-// - between certain temps
-// - between certain rainfall values
-func determineVegetation(sea, rvr, temp, rain *MapImage, vs *vegetationSettings) *MapImage {
-	x, y := sea.Dimensions()
-	vege := mutateImage(NewMapImage(x, y), func(dx, dy int, _ uint8) uint8 {
-		if sea.Value(dx, dy) == 255 || rvr.Value(dx, dy) == 255 {
-			return 0
-		}
-		rv := rain.Value(dx, dy)
-		tv := temp.Value(dx, dy)
-
-		if rv > vs.RainMin && rv < vs.RainMax && tv > vs.TempMin && tv < vs.TempMax {
-			// we're saying that rainfall is more important than
-			// temperature when determining vegetation
-			return toUint8((float64(rv) * 0.75) + (float64(tv) * 0.25))
-		}
-
-		return 0
-
-	})
-
-	return vege
-}
-
 // determineTemp returns a map of average temperatures in degrees Celcius,
 // where 100 => 0 degress (putting our min at -100c and max 155c .. seems
 // wide enough for an earth like planet)
@@ -58,27 +31,27 @@ func determineTemp(hm *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
 	_, y := hm.Dimensions()
 	equator := y / 2
 
+	// how wide the equator 'band' is
+	band := cfg.EquatorWidth * float64(y)
+
 	// difference in temp per pixel as we move out from the equator
-	dty := float64(cfg.EquatorAverageTemp-cfg.PoleAverageTemp) / float64(y/2)
+	dty := float64(cfg.EquatorAverageTemp-cfg.PoleAverageTemp) / ((float64(y) - band) / 2)
 
 	return mutateImage(hm, func(dx, dy int, z uint8) uint8 {
 		temp := cfg.EquatorAverageTemp
 
-		dueToZ := decrement(z, sealevel) / 2
-		if z < sealevel {
-			dueToZ = decrement(sealevel, z) / 2
-			dueToZ = increment(dueToZ, 10)
-		}
-
-		dueToY := float64(equator-dy) * dty
+		dueToY := 0.0
 		if dy > equator {
-			dueToY = float64(dy-equator) * dty
+			dueToY = float64(dy - equator)
+		} else {
+			dueToY = float64(equator - dy)
+		}
+		if dueToY <= band {
+			// we're inside the equator
+			return temp
 		}
 
-		temp = decrement(temp, dueToZ)
-		temp = decrement(temp, toUint8(dueToY))
-
-		return temp
+		return decrement(temp, toUint8(dueToY*dty))
 	})
 }
 
