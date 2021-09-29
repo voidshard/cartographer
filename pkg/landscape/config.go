@@ -66,7 +66,7 @@ func DefaultConfig() *Config {
 			EquatorWidth:       0.05, // % of height
 		},
 		Rivers: &riverSettings{
-			Number:                  1,
+			Number:                  30,
 			OriginMinDist:           70,
 			ForceNorthSouthSections: true,
 		},

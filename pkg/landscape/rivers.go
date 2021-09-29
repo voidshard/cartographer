@@ -255,6 +255,18 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 			}
 			hmap.SetValue(int(p.X), int(p.Y), riverbed)
 		}
+
+		// fill river point backwards just to be sure our points line up
+		for i, p := range geo.PointsAlongLine(to.Point.Round(), from.Point.Round()) {
+			if i > 1 {
+				break
+			}
+
+			// record the river
+			rvr.SetValue(int(p.X), int(p.Y), 255)
+			out.SetValue(int(p.X), int(p.Y), 255)
+		}
+
 		rvr.SetValue(to.X(), to.Y(), 255)
 		out.SetValue(to.X(), to.Y(), 255)
 		hmap.SetValue(to.X(), to.Y(), riverbed)
@@ -413,7 +425,7 @@ func riverOrigins(hmap *MapImage, cfg *riverSettings) []*Pixel {
 	)
 
 	// figure out all places we can start rivers
-	var min uint8 = 200 // fairly high up
+	var min uint8 = 220 // fairly high up
 	var max uint8 = 240 // but not on a mountain peak ..
 	origins := []*Pixel{}
 	for {
