@@ -6,11 +6,41 @@ type Config struct {
 	// base map height
 	Height uint
 
-	Rain   *rainfallSettings
-	Temp   *tempSettings
-	Rivers *riverSettings
-	Land   *landSettings
-	Sea    *seaSettings
+	Rain     *rainfallSettings
+	Temp     *tempSettings
+	Rivers   *riverSettings
+	Land     *landSettings
+	Sea      *seaSettings
+	Volcanic *volcSettings
+	Swamp    *swampSettings
+}
+
+type volcSettings struct {
+	// number of geothermal regions (max)
+	Number uint
+
+	// how far from geothermal epicentre a region can extend
+	Radius float64
+
+	// variance used in radius calculation
+	Variance float64
+
+	// min dist volcanoes must have from each other
+	OriginMinDist float64
+}
+
+type swampSettings struct {
+	// number of swamp regions (max)
+	Number uint
+
+	// how large swamps can get
+	Radius float64
+
+	// swamps must exist below this height
+	MaxHeight uint
+
+	// max height +/- across a swamp
+	DeltaHeight uint
 }
 
 // tempSettings
@@ -76,6 +106,18 @@ func DefaultConfig() *Config {
 		},
 		Sea: &seaSettings{
 			SeaLevel: 115,
+		},
+		Volcanic: &volcSettings{
+			Number:        5,
+			Radius:        30,
+			Variance:      0.7,
+			OriginMinDist: 10,
+		},
+		Swamp: &swampSettings{
+			Number:      8,
+			Radius:      100,
+			MaxHeight:   165,
+			DeltaHeight: 10,
 		},
 	}
 }

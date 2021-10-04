@@ -1,7 +1,10 @@
 package landscape
 
 import (
+	"encoding/json"
+	"fmt"
 	"image"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -20,6 +23,10 @@ type Landscape struct {
 	// map of river (or lake) vs not where 255 => fresh water, 0 => not
 	rivers *MapImage
 
+	// maps where each draws out a single river, using 255 for river
+	// and 1-254 for lake pixels
+	rivermaps []*MapImage
+
 	// map of average temperature (no wind chill) where values
 	// are in degrees c + 100 (so 100 => 0c, 120 => 20c, 60 => -40c)
 	temperature *MapImage
@@ -27,18 +34,22 @@ type Landscape struct {
 	// map of average rainfall .. unsure on exactly what this means ..
 	// but higher values imply more regular / more rain
 	rainfall *MapImage
+
+	// map of swampy terrain. Technically this would be areas of low drainage
+	// but high water
+	swamp *MapImage
+
+	// areas of geothermal activity
+	volcanic *MapImage
+
+	// interesting points on the map
+	pointsOfInterest []*POI
 }
 
-// Area represents a specific small area of the map
-type Area struct {
-	// 0-255, where higher is more/higher/better
-	Height      uint8
-	Rainfall    uint8
-	Temperature uint8 // in degress c, offset so 100 => 0 degrees cel
-
-	// if the square contains fresh/salt water
-	Sea   bool
-	River bool
+// PointsOfInterest returns `POI` or `Points of Interest` - these
+// are denoted via (X,Y) co-ords (in pixels) and a `PointType`
+func (l *Landscape) PointsOfInterest() []*POI {
+	return l.pointsOfInterest
 }
 
 // Dimensions returns the width & height of each map in pixels.
@@ -53,13 +64,39 @@ func (l *Landscape) At(x, y int) *Area {
 	if x < 0 || y < 0 || x >= maxx || y >= maxy {
 		return nil
 	}
-	return &Area{
+
+	a := &Area{
 		Height:      l.height.Value(x, y),
 		Rainfall:    l.rainfall.Value(x, y),
 		Sea:         l.sea.Value(x, y) == 255,
 		River:       l.rivers.Value(x, y) == 255,
 		Temperature: l.temperature.Value(x, y),
 	}
+	if !a.River {
+		return a
+	}
+
+	// figure out which river
+	for i, m := range l.rivermaps {
+		// note that;
+		// 0 -> not a river
+		// 1-254 -> lake id (on river)
+		// 255 -> is a river
+		rv := m.Value(x, y)
+		if rv == 0 {
+			// not a river
+			continue
+		}
+		a.RiverID = i + 1 // reserve 0 as 'not a river id'
+		if rv != 255 {
+			// use first lake
+			a.LakeID = int(rv)
+			a.Lake = true
+			break
+		}
+	}
+
+	return a
 }
 
 // DebugRender renders out the various maps we have to an
@@ -67,6 +104,7 @@ func (l *Landscape) At(x, y int) *Area {
 func (w *Landscape) DebugRender() (string, error) {
 	d := os.TempDir()
 
+	// write out main maps
 	for _, i := range []struct {
 		Name string
 		Img  image.Image
@@ -76,6 +114,8 @@ func (w *Landscape) DebugRender() (string, error) {
 		{"rivers.png", w.rivers},
 		{"temperature.png", w.temperature},
 		{"rainfall.png", w.rainfall},
+		{"geothermal.png", w.volcanic},
+		{"swamp.png", w.swamp},
 	} {
 		err := savePng(filepath.Join(d, i.Name), i.Img)
 		if err != nil {
@@ -83,5 +123,19 @@ func (w *Landscape) DebugRender() (string, error) {
 		}
 	}
 
-	return d, nil
+	// write out river maps
+	for i := range w.rivermaps {
+		err := savePng(filepath.Join(d, fmt.Sprintf("river.%d.png", i)), w.rivermaps[i])
+		if err != nil {
+			return d, err
+		}
+	}
+
+	data, err := json.Marshal(w.pointsOfInterest)
+	if err != nil {
+		return d, err
+	}
+	err = ioutil.WriteFile(filepath.Join(d, "pois.json"), data, 0644)
+
+	return d, err
 }

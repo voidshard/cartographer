@@ -2,7 +2,140 @@ package landscape
 
 import (
 	perlin "github.com/voidshard/cartographer/pkg/perlin"
+
+	"math"
 )
+
+// determineSwamp picks a few areas and figures out where might make sense to have swamps.
+// Swamps are areas within some height bounds radiating out from the end section(s) of a river.
+// Technically we can have swamp areas in other places .. but this is more straightforward to
+// reason about.
+// Nb. we probably should figure out areas based on 'drainage' eg. above sea level, near water,
+// reasonably flat / bowl shaped ..
+// Currently areas are "swamp" or not
+func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []*POI) (*MapImage, []*POI) {
+	if ss.Radius < 1 {
+		ss.Radius = 1
+	}
+	x, y := hmap.Dimensions()
+
+	// new blank map
+	smap := NewMapImage(x, y)
+	smap.SetBackground(0)
+	pois := []*POI{}
+
+	if len(riverends) == 0 {
+		return smap, pois
+	}
+
+	for i, start := range riverends {
+		if i > int(ss.Number) {
+			break
+		}
+		oh := int(hmap.Value(start.X, start.Y))
+		pois = append(pois, &POI{X: start.X, Y: start.Y, Type: Swamp})
+
+		for dy := start.Y - int(ss.Radius)/2; dy < start.Y+int(ss.Radius)/2; dy++ {
+			for dx := start.X - int(ss.Radius)/2; dx < start.X+int(ss.Radius)/2; dx++ {
+				h := int(hmap.Value(dx, dy))
+				if h > int(ss.MaxHeight) {
+					// swamps must be below max height
+					continue
+				}
+				if h >= oh+int(ss.DeltaHeight) || h < oh-int(ss.DeltaHeight) {
+					// swamp areas must be within some height of each other
+					// (reasonably flat)
+					continue
+				}
+				notSea := sea.Value(dx, dy) == 0
+				notRiver := rivers.Value(dx, dy) == 0
+				if notSea && notRiver {
+					// obviously river/sea areas are not swamp
+					smap.SetValue(dx, dy, 255)
+				}
+			}
+		}
+
+	}
+
+	return smap, pois
+}
+
+// determineGeothermal picks some areas to be the centres of volcanoes & describes
+// a region around them as geothermally active.
+// Areas are indicated on a scale from 0-255 as to how geothermal they are
+// (whatever that means).
+func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
+	if vs.Radius < 1 {
+		vs.Radius = 1
+	}
+
+	x, y := hmap.Dimensions()
+
+	// new blank map
+	vmap := NewMapImage(x, y)
+	vmap.SetBackground(0)
+	pois := []*POI{}
+
+	// find where we can put our areas
+	origins := geothermalOrigins(hmap, vs)
+	if len(origins) == 0 {
+		return vmap, pois
+	}
+
+	pmap := &MapImage{im: perlin.Perlin(x, y, vs.Variance)}
+
+	for _, volcano := range origins {
+		pois = append(pois, &POI{X: volcano.X(), Y: volcano.Y(), Type: Volcano})
+		vmap.SetValue(volcano.X(), volcano.Y(), 255)
+
+		// describe square around origin
+		for dy := volcano.Y() - int(vs.Radius)/2; dy < volcano.Y()+int(vs.Radius)/2; dy++ {
+			for dx := volcano.X() - int(vs.Radius)/2; dx < volcano.X()+int(vs.Radius)/2; dx++ {
+				current := vmap.Value(dx, dy)
+
+				pv := pmap.Value(dx, dy)
+				dist := math.Sqrt(
+					math.Pow(float64(volcano.X())-float64(dx), 2) + math.Pow(float64(volcano.Y())-float64(dy), 2),
+				)
+
+				// drastically cut geothermal activity as we radiate outwards
+				if dist > vs.Radius {
+					continue
+				} else if dist > vs.Radius/2 {
+					pv /= 6
+				} else if dist > vs.Radius/3 {
+					pv /= 4
+				} else if dist > vs.Radius/4 {
+					pv /= 2
+				}
+
+				// allow for volcanic areas to overlap
+				if pv > current {
+					vmap.SetValue(dx, dy, pv)
+				}
+			}
+		}
+
+	}
+
+	return vmap, pois
+}
+
+// geothermalOrigins figures out where we can put volcanoes.
+// Note that we actually could put these at any height .. even if it ended
+// up at sealevel it could simply be a caldera with no volcanic cone.
+// Even beneath the sea wouldn't be strange
+func geothermalOrigins(hmap *MapImage, cfg *volcSettings) []*Pixel {
+	return origins(
+		hmap,
+		cfg.OriginMinDist,
+		int(cfg.Number),
+		220, // we'll try to get volcanoes in the mountains
+		255,
+		90, // but actually pretty much anywhere is ok
+	)
+}
 
 // determineRainfall returns rainfall 0-255
 // TODO; include rain shadowing, consider prevailing winds

@@ -16,13 +16,16 @@ const (
 // determineRivers determines where our rivers will be, we return a new heightmap
 // & the map of rivers.
 // Rivers are sufficiently complicated that they seem worth their own file ..
-func determineRivers(hmap *MapImage, sealevel uint8, cfg *riverSettings) *MapImage {
+func determineRivers(hmap *MapImage, sealevel uint8, cfg *riverSettings) (*MapImage, []*MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 	out := NewMapImage(x, y)
 	out.SetBackground(0)
 
+	rivermaps := []*MapImage{}
+	pois := []*POI{}
+
 	if cfg.Number < 1 {
-		return out
+		return out, rivermaps, pois
 	}
 
 	origins := riverOrigins(hmap, cfg) // places where a river might start
@@ -46,12 +49,14 @@ func determineRivers(hmap *MapImage, sealevel uint8, cfg *riverSettings) *MapIma
 		}
 
 		// draw in the river, expanding the outline
-		rvr := drawRiver(hmap, out, path)
+		rvr, riverpois := drawRiver(hmap, out, path)
+		pois = append(pois, riverpois...)
 
 		// ensure waterfalls are north-south facing
 		if cfg.ForceNorthSouthSections {
 			ensureNSFall(hmap, out, rvr, path)
 		}
+		rivermaps = append(rivermaps, rvr)
 
 		rivers++
 		if rivers >= int(cfg.Number) {
@@ -59,7 +64,7 @@ func determineRivers(hmap *MapImage, sealevel uint8, cfg *riverSettings) *MapIma
 		}
 	}
 
-	return out
+	return out, rivermaps, pois
 }
 
 // ensureNSFall smooths a river so that falls in river height are
@@ -185,11 +190,20 @@ func ensureNSFlow(path [][]*Pixel) [][]*Pixel {
 	return fixed
 }
 
-func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
+// drawRiver
+// hmap: height map
+// out: the main river output map
+// path: the rough path that the river follows
+func drawRiver(hmap, out *MapImage, path [][]*Pixel) (*MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 	rvr := NewMapImage(x, y)
+	rvr.SetBackground(0)
+	pois := []*POI{
+		&POI{X: path[0][0].X(), Y: path[0][0].Y(), Type: RiverOrigin},
+	}
 
 	riverbed := decrement(hmap.Value(path[0][0].X(), path[0][0].Y()), 2)
+	lakes := 0
 
 	for i := 1; i < len(path); i++ {
 		this := path[i-1]
@@ -205,6 +219,11 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 				func(i, j int) bool { return this[i].Point.DistPt(to.Point) < this[j].Point.DistPt(to.Point) },
 			)
 			from = this[0]
+			pois = append(
+				pois,
+				&POI{X: this[0].X(), Y: this[0].Y(), Type: LakeOrigin},
+				&POI{X: from.X(), Y: from.Y(), Type: LakeEnd},
+			)
 
 			merge := false
 			lake := allPointsInPolygon(hmap, this)
@@ -213,15 +232,22 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 				riverbed = lowest
 			}
 
+			lakes += 1
+			if lakes >= 255 {
+				lakes = 1 // rotate around
+			}
+			lakeColour := 255 - lakes
+
 			for _, p := range lake {
 				isRiver := out.Value(p.X(), p.Y()) == 255
-				isThisRiver := rvr.Value(p.X(), p.Y()) == 255
+				isThisRiver := rvr.Value(p.X(), p.Y()) != 0
 				if isRiver && !isThisRiver {
 					// we've merged with another river
 					merge = true
 				}
 
-				rvr.SetValue(p.X(), p.Y(), 255)
+				rvr.SetValue(p.X(), p.Y(), uint8(lakeColour))
+
 				out.SetValue(p.X(), p.Y(), 255)
 
 				// TODO: improve to have uneven lake bed
@@ -230,7 +256,11 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 
 			if merge {
 				// we don't need an exit river from the lake (since our lake hit another river)
-				return rvr
+				pois = append(
+					pois,
+					&POI{X: this[0].X(), Y: this[0].Y(), Type: RiverEnd},
+				)
+				return rvr, pois
 			}
 		}
 
@@ -238,11 +268,16 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 		out.SetValue(from.X(), from.Y(), 255)
 		hmap.SetValue(from.X(), from.Y(), riverbed)
 		pts := geo.PointsAlongLine(from.Point.Round(), to.Point.Round())
-		for _, p := range pts {
+		for i, p := range pts {
 			isRiver := out.Value(int(p.X), int(p.Y)) == 255
-			isThisRiver := rvr.Value(int(p.X), int(p.Y)) == 255
+			isThisRiver := rvr.Value(int(p.X), int(p.Y)) != 0
 			if isRiver && !isThisRiver {
-				return rvr // we've merged with another river
+				last := pts[i-1]
+				pois = append(
+					pois,
+					&POI{X: int(last.X), Y: int(last.Y), Type: RiverEnd},
+				)
+				return rvr, pois // we've merged with another river
 			}
 
 			// record the river
@@ -267,12 +302,16 @@ func drawRiver(hmap, out *MapImage, path [][]*Pixel) *MapImage {
 			out.SetValue(int(p.X), int(p.Y), 255)
 		}
 
+		pois = append(
+			pois,
+			&POI{X: to.X(), Y: to.Y(), Type: RiverEnd},
+		)
 		rvr.SetValue(to.X(), to.Y(), 255)
 		out.SetValue(to.X(), to.Y(), 255)
 		hmap.SetValue(to.X(), to.Y(), riverbed)
 	}
 
-	return rvr
+	return rvr, pois
 }
 
 func allPointsInPolygon(hmap *MapImage, in []*Pixel) []*Pixel {
@@ -407,8 +446,20 @@ func roughPath(hmap *MapImage, sealevel uint8, o *Pixel) []*Pixel {
 
 // riverOrigins figures out where rivers can start
 func riverOrigins(hmap *MapImage, cfg *riverSettings) []*Pixel {
-	if cfg.OriginMinDist < 0 {
-		cfg.OriginMinDist = 0
+	return origins(
+		hmap,
+		cfg.OriginMinDist,
+		int(cfg.Number),
+		220, // we'd like rivers to start 220-240 height
+		240,
+		140, // but if we're desperate we'll take down to 140
+	)
+}
+
+// origins picks places between given heights on the map some dist apart
+func origins(hmap *MapImage, minDist float64, number int, omin, omax, minHeight uint8) []*Pixel {
+	if minDist < 0 {
+		minDist = 0
 	}
 
 	// all pixels, sorted by height
@@ -424,9 +475,9 @@ func riverOrigins(hmap *MapImage, cfg *riverSettings) []*Pixel {
 		func(i, j int) bool { return byheight[i].V > byheight[j].V },
 	)
 
-	// figure out all places we can start rivers
-	var min uint8 = 220 // fairly high up
-	var max uint8 = 240 // but not on a mountain peak ..
+	// figure out all places we can start
+	var min uint8 = omin
+	var max uint8 = omax
 	origins := []*Pixel{}
 	for {
 		candidates := pixelsBetween(min, max, byheight)
@@ -436,12 +487,12 @@ func riverOrigins(hmap *MapImage, cfg *riverSettings) []*Pixel {
 		shuffle(candidates)
 
 		for _, origin := range candidates {
-			if len(origins) >= int(cfg.Number) {
+			if len(origins) >= number {
 				break // we've done all the rivers we were asked to
 			}
 			tooclose := false
 			for _, other := range origins {
-				if other.Point.DistPt(origin.Point) < cfg.OriginMinDist {
+				if other.Point.DistPt(origin.Point) < minDist {
 					tooclose = true
 					break
 				}
@@ -451,13 +502,13 @@ func riverOrigins(hmap *MapImage, cfg *riverSettings) []*Pixel {
 			}
 			origins = append(origins, origin)
 		}
-		if len(origins) >= int(cfg.Number) {
+		if len(origins) >= number {
 			break
 		}
 
 		max = min
 		min = min - 20
-		if min < 140 { // we're too low to realistically start a river
+		if min < minHeight {
 			break
 		}
 	}
