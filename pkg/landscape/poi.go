@@ -9,6 +9,7 @@ const (
 	LakeEnd     PointType = "lake-end"
 	Volcano     PointType = "volcano"
 	Swamp       PointType = "swamp"
+	Mountain    PointType = "mountain"
 )
 
 // POI `PointOfInterest`

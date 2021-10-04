@@ -38,13 +38,20 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	}()
 
 	wg.Wait()
-	wg.Add(4)
+	wg.Add(5)
 
 	var temp *MapImage
 	var rain *MapImage
 	var volc *MapImage
 	var swmp *MapImage
 
+	go func() {
+		defer wg.Done()
+		mountains := findMountains(hmap)
+		plock.Lock()
+		defer plock.Unlock()
+		pois = append(pois, mountains...)
+	}()
 	go func() {
 		defer wg.Done()
 		vpois := []*POI{}

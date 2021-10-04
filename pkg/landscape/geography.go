@@ -6,6 +6,18 @@ import (
 	"math"
 )
 
+// findMountains discovers all mountains (over some height).
+// Nb. these might also be volcanoes
+func findMountains(hmap *MapImage) []*POI {
+	mountains := []*POI{}
+	eachPixel(hmap, func(dx, dy int, c uint8) {
+		if c >= 240 {
+			mountains = append(mountains, &POI{X: dx, Y: dy, Type: Mountain})
+		}
+	})
+	return mountains
+}
+
 // determineSwamp picks a few areas and figures out where might make sense to have swamps.
 // Swamps are areas within some height bounds radiating out from the end section(s) of a river.
 // Technically we can have swamp areas in other places .. but this is more straightforward to
