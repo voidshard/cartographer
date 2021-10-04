@@ -71,6 +71,8 @@ func (l *Landscape) At(x, y int) *Area {
 		Sea:         l.sea.Value(x, y) == 255,
 		River:       l.rivers.Value(x, y) == 255,
 		Temperature: l.temperature.Value(x, y),
+		Swamp:       l.swamp.Value(x, y) == 255,
+		Volcanisim:  l.volcanic.Value(x, y),
 	}
 	if !a.River {
 		return a
@@ -114,7 +116,7 @@ func (w *Landscape) DebugRender() (string, error) {
 		{"rivers.png", w.rivers},
 		{"temperature.png", w.temperature},
 		{"rainfall.png", w.rainfall},
-		{"geothermal.png", w.volcanic},
+		{"volcanism.png", w.volcanic},
 		{"swamp.png", w.swamp},
 	} {
 		err := savePng(filepath.Join(d, i.Name), i.Img)

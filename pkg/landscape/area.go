@@ -6,11 +6,13 @@ type Area struct {
 	Height      uint8
 	Rainfall    uint8
 	Temperature uint8 // in degress c, offset so 100 => 0 degrees cel
+	Volcanism   uint8
 
 	// if the square contains fresh/salt water
 	Sea   bool
 	River bool
 	Lake  bool // lake implies river
+	Swamp bool
 
 	// if river, we set a river ID else 0
 	RiverID int
