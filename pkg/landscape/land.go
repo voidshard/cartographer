@@ -72,7 +72,8 @@ func (l *Landscape) At(x, y int) *Area {
 		River:       l.rivers.Value(x, y) == 255,
 		Temperature: l.temperature.Value(x, y),
 		Swamp:       l.swamp.Value(x, y) == 255,
-		Volcanisim:  l.volcanic.Value(x, y),
+		Swampland:   l.swamp.Value(x, y) == 120,
+		Volcanism:   l.volcanic.Value(x, y),
 	}
 	if !a.River {
 		return a

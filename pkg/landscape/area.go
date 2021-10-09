@@ -9,10 +9,11 @@ type Area struct {
 	Volcanism   uint8
 
 	// if the square contains fresh/salt water
-	Sea   bool
-	River bool
-	Lake  bool // lake implies river
-	Swamp bool
+	Sea       bool
+	River     bool
+	Lake      bool // lake implies river
+	Swamp     bool // swamp water
+	Swampland bool // water ridden land
 
 	// if river, we set a river ID else 0
 	RiverID int

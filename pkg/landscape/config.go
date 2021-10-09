@@ -41,6 +41,9 @@ type swampSettings struct {
 
 	// max height +/- across a swamp
 	DeltaHeight uint
+
+	// variance used in swamp outlines
+	Variance float64
 }
 
 // tempSettings
@@ -118,6 +121,7 @@ func DefaultConfig() *Config {
 			Radius:      100,
 			MaxHeight:   165,
 			DeltaHeight: 10,
+			Variance:    0.8,
 		},
 	}
 }

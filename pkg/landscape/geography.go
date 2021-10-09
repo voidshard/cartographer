@@ -40,6 +40,8 @@ func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []
 		return smap, pois
 	}
 
+	per := &MapImage{im: perlin.Perlin(x, y, ss.Variance)}
+
 	for i, start := range riverends {
 		if i > int(ss.Number) {
 			break
@@ -59,11 +61,19 @@ func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []
 					// (reasonably flat)
 					continue
 				}
-				notSea := sea.Value(dx, dy) == 0
-				notRiver := rivers.Value(dx, dy) == 0
-				if notSea && notRiver {
-					// obviously river/sea areas are not swamp
+
+				if sea.Value(dx, dy) != 0 || rivers.Value(dx, dy) != 0 {
+					// skip sea/river
+					continue
+				}
+
+				pv := per.Value(dx, dy)
+				if pv%5 == 0 {
+					// swamp water
 					smap.SetValue(dx, dy, 255)
+				} else {
+					// swampy land
+					smap.SetValue(dx, dy, 120)
 				}
 			}
 		}
