@@ -109,7 +109,8 @@ func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 
 	for _, volcano := range origins {
 		pois = append(pois, &POI{X: volcano.X(), Y: volcano.Y(), Type: Volcano})
-		vmap.SetValue(volcano.X(), volcano.Y(), 255)
+
+		lavamap := &MapImage{im: perlin.Perlin(x, y, vs.Variance*1.5)}
 
 		// describe square around origin
 		for dy := volcano.Y() - int(vs.Radius)/2; dy < volcano.Y()+int(vs.Radius)/2; dy++ {
@@ -117,6 +118,11 @@ func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 				current := vmap.Value(dx, dy)
 
 				pv := pmap.Value(dx, dy)
+				if lavamap.Value(dx, dy) > vs.LavaOver {
+					pv = 255
+					hmap.SetValue(dx, dy, decrement(hmap.Value(dx, dy), 5))
+				}
+
 				dist := math.Sqrt(
 					math.Pow(float64(volcano.X())-float64(dx), 2) + math.Pow(float64(volcano.Y())-float64(dy), 2),
 				)
@@ -126,9 +132,9 @@ func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 					continue
 				} else if dist > vs.Radius/2 {
 					pv /= 6
-				} else if dist > vs.Radius/3 {
+				} else if dist > vs.Radius/3 && pv != 255 {
 					pv /= 4
-				} else if dist > vs.Radius/4 {
+				} else if dist > vs.Radius/4 && pv != 255 {
 					pv /= 2
 				}
 

@@ -27,6 +27,9 @@ type volcSettings struct {
 
 	// min dist volcanoes must have from each other
 	OriginMinDist float64
+
+	// at or over this value we consider volanic land lava
+	LavaOver uint8
 }
 
 type swampSettings struct {
@@ -115,6 +118,7 @@ func DefaultConfig() *Config {
 			Radius:        30,
 			Variance:      0.7,
 			OriginMinDist: 10,
+			LavaOver:      180,
 		},
 		Swamp: &swampSettings{
 			Number:      8,
