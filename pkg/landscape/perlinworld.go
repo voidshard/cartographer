@@ -90,7 +90,7 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	}()
 	wg.Wait()
 
-	return &Landscape{
+	l := &Landscape{
 		height:           hmap,
 		sea:              sea,
 		rivers:           rvrs,
@@ -100,5 +100,10 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 		pointsOfInterest: pois,
 		volcanic:         volc,
 		swamp:            swmp,
-	}, nil
+	}
+
+	// finally, using everything else, bucket areas into biomes
+	l.determineBiomes(cfg)
+
+	return l, nil
 }

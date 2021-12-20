@@ -39,6 +39,10 @@ func (m *MapImage) SetValue(x, y int, v uint8) {
 	m.im.Set(x, y, color.RGBA{v, v, v, 255})
 }
 
+func (m *MapImage) Set(x, y int, c color.Color) {
+	m.im.Set(x, y, c)
+}
+
 func (m *MapImage) Value(x, y int) uint8 {
 	r, _, _, _ := m.At(x, y).RGBA()
 	return uint8(r)

@@ -15,7 +15,7 @@ type Area struct {
 	Swamp bool // swamp water
 	Lava  bool
 
-	BiomeSwamp bool
+	Biome Biome
 
 	// if river, we set a river ID else 0
 	RiverID int

@@ -44,6 +44,9 @@ type Landscape struct {
 
 	// interesting points on the map
 	pointsOfInterest []*POI
+
+	//
+	biomes *MapImage
 }
 
 // PointsOfInterest returns `POI` or `Points of Interest` - these
@@ -72,9 +75,9 @@ func (l *Landscape) At(x, y int) *Area {
 		River:       l.rivers.Value(x, y) == 255,
 		Temperature: l.temperature.Value(x, y),
 		Swamp:       l.swamp.Value(x, y) == 255,
-		BiomeSwamp:  l.swamp.Value(x, y) != 0,
 		Volcanism:   l.volcanic.Value(x, y),
 		Lava:        l.volcanic.Value(x, y) == 255,
+		Biome:       toBiome(l.biomes.At(x, y)),
 	}
 	if !a.River {
 		return a
@@ -120,6 +123,7 @@ func (w *Landscape) DebugRender() (string, error) {
 		{"rainfall.png", w.rainfall},
 		{"volcanism.png", w.volcanic},
 		{"swamp.png", w.swamp},
+		{"biomes.png", w.biomes},
 	} {
 		err := savePng(filepath.Join(d, i.Name), i.Img)
 		if err != nil {

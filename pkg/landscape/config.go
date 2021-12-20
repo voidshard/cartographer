@@ -13,6 +13,7 @@ type Config struct {
 	Sea      *seaSettings
 	Volcanic *volcSettings
 	Swamp    *swampSettings
+	Biome    *biomeSettings
 }
 
 type volcSettings struct {
@@ -89,10 +90,60 @@ type landSettings struct {
 	MountainVariance float64
 }
 
+type biomeSettings struct {
+	// any temperature at or below this is auto frozen unless sea or volcanic
+	FrozenTemp uint8
+
+	// A desert is declared if rainfall too low & temp is too high.
+	// Technically temp is less important here.
+	DesertTemp uint8
+	DesertRain uint8
+
+	// Tundra is somewhere reasonably cold, windswept & lowish on rainfall.
+	// We require it's temp & rainfall at or below these values
+	TundraTemp    uint8
+	TundraRainMin uint8
+	TundraRainMax uint8
+
+	// tropical forest requires a min temp & rainfall
+	ForestTropicalTemp uint8
+	ForestTropicalRain uint8
+
+	// temperate forest requires a min temp & rainfall
+	// ... higher temps indicate a tropical forest.
+	ForestTemperateTemp uint8
+	ForestTemperateRain uint8
+
+	// Within this distance from a river/lake we consider the land
+	// well watered (ie. the same as high rainfall)
+	FreshWaterRadius uint
+
+	// height over which we call the mountain biome
+	MountainHeight uint
+
+	// hight over which we call the highlands biome
+	HighlandsHeight uint
+}
+
 func DefaultConfig() *Config {
 	return &Config{
-		Width:  500,
-		Height: 500,
+		Width:  1000,
+		Height: 1000,
+		Biome: &biomeSettings{
+			FrozenTemp:          70,
+			DesertTemp:          20,
+			DesertRain:          40,
+			TundraTemp:          100,
+			TundraRainMin:       40,
+			TundraRainMax:       80,
+			ForestTropicalTemp:  130,
+			ForestTropicalRain:  205,
+			ForestTemperateRain: 100,
+			ForestTemperateTemp: 105,
+			FreshWaterRadius:    10,
+			MountainHeight:      210,
+			HighlandsHeight:     170,
+		},
 		Rain: &rainfallSettings{
 			RainfallVariance: 0.03,
 		},
@@ -102,7 +153,7 @@ func DefaultConfig() *Config {
 			EquatorWidth:       0.05, // % of height
 		},
 		Rivers: &riverSettings{
-			Number:                  30,
+			Number:                  60,
 			OriginMinDist:           70,
 			ForceNorthSouthSections: true,
 		},
