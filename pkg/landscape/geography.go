@@ -87,7 +87,7 @@ func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []
 // a region around them as geothermally active.
 // Areas are indicated on a scale from 0-255 as to how geothermal they are
 // (whatever that means).
-func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
+func determineGeothermal(hmap, sea, rvr *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 	if vs.Radius < 1 {
 		vs.Radius = 1
 	}
@@ -108,6 +108,13 @@ func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 	pmap := &MapImage{im: perlin.Perlin(x, y, vs.Variance)}
 
 	for _, volcano := range origins {
+		if rvr.Value(volcano.X(), volcano.Y()) == 255 {
+			continue // in a river
+		}
+		if sea.Value(volcano.X(), volcano.Y()) == 255 {
+			continue // in the sea
+		}
+
 		pois = append(pois, &POI{X: volcano.X(), Y: volcano.Y(), Type: Volcano})
 
 		lavamap := &MapImage{im: perlin.Perlin(x, y, vs.Variance*1.5)}
@@ -115,6 +122,13 @@ func determineGeothermal(hmap *MapImage, vs *volcSettings) (*MapImage, []*POI) {
 		// describe square around origin
 		for dy := volcano.Y() - int(vs.Radius)/2; dy < volcano.Y()+int(vs.Radius)/2; dy++ {
 			for dx := volcano.X() - int(vs.Radius)/2; dx < volcano.X()+int(vs.Radius)/2; dx++ {
+				if rvr.Value(dx, dy) == 255 {
+					continue // in a river
+				}
+				if sea.Value(dx, dy) == 255 {
+					continue // in the sea
+				}
+
 				current := vmap.Value(dx, dy)
 
 				pv := pmap.Value(dx, dy)

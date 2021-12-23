@@ -62,13 +62,16 @@ func (l *Landscape) Dimensions() (int, int) {
 
 // At returns the state of the land at a given place on the map.
 // Nil is returned if an out-of-bounds area is requested.
+//
+// Nb. the fields
+//  Lake, RiverID, LakeID are only set in RiverAt()
+//  - this saves us work if this info isn't needed
 func (l *Landscape) At(x, y int) *Area {
 	maxx, maxy := l.Dimensions()
 	if x < 0 || y < 0 || x >= maxx || y >= maxy {
 		return nil
 	}
-
-	a := &Area{
+	return &Area{
 		Height:      l.height.Value(x, y),
 		Rainfall:    l.rainfall.Value(x, y),
 		Sea:         l.sea.Value(x, y) == 255,
@@ -79,6 +82,11 @@ func (l *Landscape) At(x, y int) *Area {
 		Lava:        l.volcanic.Value(x, y) == 255,
 		Biome:       toBiome(l.biomes.At(x, y)),
 	}
+}
+
+func (l *Landscape) RiverAt(x, y int) *Area {
+	a := l.At(x, y)
+
 	if !a.River {
 		return a
 	}
