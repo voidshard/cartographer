@@ -2,8 +2,6 @@ package landscape
 
 import (
 	perlin "github.com/voidshard/cartographer/pkg/perlin"
-
-	"math"
 )
 
 // findMountains discovers all mountains (over some height).
@@ -83,15 +81,7 @@ func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []
 	return smap, pois
 }
 
-// determineGeothermal picks some areas to be the centres of volcanoes & describes
-// a region around them as geothermally active.
-// Areas are indicated on a scale from 0-255 as to how geothermal they are
-// (whatever that means).
-func determineGeothermal(hmap, sea, rvr *MapImage, vs *volcSettings) (*MapImage, []*POI) {
-	if vs.Radius < 1 {
-		vs.Radius = 1
-	}
-
+func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 
 	// new blank map
@@ -99,7 +89,7 @@ func determineGeothermal(hmap, sea, rvr *MapImage, vs *volcSettings) (*MapImage,
 	vmap.SetBackground(0)
 	pois := []*POI{}
 
-	// find where we can put our areas
+	// pick some places to place volcanoes
 	origins := geothermalOrigins(hmap, vs)
 	if len(origins) == 0 {
 		return vmap, pois
@@ -108,57 +98,63 @@ func determineGeothermal(hmap, sea, rvr *MapImage, vs *volcSettings) (*MapImage,
 	pmap := &MapImage{im: perlin.Perlin(x, y, vs.Variance)}
 
 	for _, volcano := range origins {
-		if rvr.Value(volcano.X(), volcano.Y()) == 255 {
-			continue // in a river
-		}
-		if sea.Value(volcano.X(), volcano.Y()) == 255 {
-			continue // in the sea
-		}
-
 		pois = append(pois, &POI{X: volcano.X(), Y: volcano.Y(), Type: Volcano})
 
-		lavamap := &MapImage{im: perlin.Perlin(x, y, vs.Variance*1.5)}
+		pv := pmap.Value(volcano.X(), volcano.Y())
 
-		// describe square around origin
-		for dy := volcano.Y() - int(vs.Radius)/2; dy < volcano.Y()+int(vs.Radius)/2; dy++ {
-			for dx := volcano.X() - int(vs.Radius)/2; dx < volcano.X()+int(vs.Radius)/2; dx++ {
-				if rvr.Value(dx, dy) == 255 {
-					continue // in a river
+		vrMax := increment(pv, vs.VolcanicRedius)
+		vrMin := decrement(pv, vs.VolcanicRedius)
+		lvMax := increment(pv, vs.LavaRadius)
+		lvMin := decrement(pv, vs.LavaRadius)
+
+		seen := map[int]bool{}
+		check := []*Pixel{volcano}
+
+		for {
+			if len(check) == 0 {
+				break
+			}
+
+			me := check[len(check)-1]
+
+			dist := volcano.Point.DistPt(me.Point)
+
+			if me.V > lvMax || me.V < lvMin || dist >= vs.MaxRadius/2 { // VOLCANIC
+				hv := hmap.Value(me.X(), me.Y())
+				if hv < sealevel {
+					// raise up land above sealevel
+					notSealevel := 255 - sealevel
+					hv = uint8(float64(hv)*float64(notSealevel)/255) + sealevel
 				}
-				if sea.Value(dx, dy) == 255 {
-					continue // in the sea
-				}
+				hmap.SetValue(me.X(), me.Y(), hv)
+				vmap.SetValue(me.X(), me.Y(), 120)
+			} else { // LAVA
+				hmap.SetValue(me.X(), me.Y(), decrement(hmap.Value(me.X(), me.Y()), 5))
+				vmap.SetValue(me.X(), me.Y(), 255)
+			}
 
-				current := vmap.Value(dx, dy)
-
-				pv := pmap.Value(dx, dy)
-				if lavamap.Value(dx, dy) > vs.LavaOver {
-					pv = 255
-					hmap.SetValue(dx, dy, decrement(hmap.Value(dx, dy), 5))
-				}
-
-				dist := math.Sqrt(
-					math.Pow(float64(volcano.X())-float64(dx), 2) + math.Pow(float64(volcano.Y())-float64(dy), 2),
-				)
-
-				// drastically cut geothermal activity as we radiate outwards
-				if dist > vs.Radius {
+			check = check[:len(check)-1] // slice off the last element
+			for _, next := range pmap.Cardinals(me.X(), me.Y(), 1) {
+				if next.V > vrMax || next.V < vrMin {
+					vmap.SetValue(next.X(), next.Y(), 50)
 					continue
-				} else if dist > vs.Radius/2 {
-					pv /= 6
-				} else if dist > vs.Radius/3 && pv != 255 {
-					pv /= 4
-				} else if dist > vs.Radius/4 && pv != 255 {
-					pv /= 2
 				}
 
-				// allow for volcanic areas to overlap
-				if pv > current {
-					vmap.SetValue(dx, dy, pv)
+				idx := int(next.X())*y + int(next.Y())
+				done, _ := seen[idx]
+				if done { // we've done this so ignore
+					continue
 				}
+
+				dist := volcano.Point.DistPt(next.Point)
+				if dist > vs.MaxRadius { // too far from volc centre
+					continue
+				}
+
+				seen[idx] = true
+				check = append(check, next)
 			}
 		}
-
 	}
 
 	return vmap, pois

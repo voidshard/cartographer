@@ -14,7 +14,7 @@ const (
 // determineRivers determines where our rivers will be, we return a new heightmap
 // & the map of rivers.
 // Rivers are sufficiently complicated that they seem worth their own file ..
-func determineRivers(hmap, sea *MapImage, cfg *riverSettings) (*MapImage, []*MapImage, []*POI) {
+func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, []*MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 	out := NewMapImage(x, y)
 	out.SetBackground(0)
@@ -32,8 +32,13 @@ func determineRivers(hmap, sea *MapImage, cfg *riverSettings) (*MapImage, []*Map
 	rivers := 0 // rivers we've accepted
 
 	for _, o := range origins {
+		if volc.Value(o.X(), o.Y()) > 120 {
+			// don't start rivers in volcanic land
+			continue
+		}
+
 		// draw in the river, expanding the outline (& respecting other rivers)
-		rvr, riverpois, _ := drawRiver(hmap, out, sea, o, cfg)
+		rvr, riverpois, _ := drawRiver(hmap, out, sea, volc, o, cfg)
 
 		pois = append(pois, riverpois...)
 		rivermaps = append(rivermaps, rvr)
@@ -52,7 +57,7 @@ func determineRivers(hmap, sea *MapImage, cfg *riverSettings) (*MapImage, []*Map
 // determining the direction of the river, ensuring it stops if / when it merges with another river etc.
 // Rather than go over the river path multiple times (as previously) we're going to attempt to do this
 // all at once & save on re-going over the path multiple times.
-func drawRiver(hmap, out, sea *MapImage, o *Pixel, cfg *riverSettings) (*MapImage, []*POI, []*Pixel) {
+func drawRiver(hmap, out, sea, volc *MapImage, o *Pixel, cfg *riverSettings) (*MapImage, []*POI, []*Pixel) {
 	x, y := hmap.Dimensions()
 
 	pois := []*POI{&POI{X: o.X(), Y: o.Y(), Type: RiverOrigin}}
@@ -84,32 +89,54 @@ func drawRiver(hmap, out, sea *MapImage, o *Pixel, cfg *riverSettings) (*MapImag
 	dir := startingdir
 	missedDecrements := 0
 
+	lastVolc := volc.Value(o.X(), o.Y())
+
 	for {
-		// change direction left or right
-		if float64(rand.Intn(int(100*riverTurnChance))) < riverTurnChance {
-			// we change randomly, but do not allow too turning too heavily
-			// this prevents some .. circular cases
-			// If we've been asked to force a north/south section we'll try that first
-			var newdir shapes.Heading
-			if rand.Intn(2) == 1 {
-				newdir = dir.Left()
-				if newdir.Dist(startingdir) > 2 {
-					newdir = dir.Right()
-				}
-			} else {
-				newdir = dir.Right()
-				if newdir.Dist(startingdir) > 2 {
-					newdir = dir.Left()
-				}
+		this := path[len(path)-1]
+
+		possible := []*shapes.Heading{}
+		for _, h := range []shapes.Heading{
+			dir,
+			dir.Left(),
+			dir.Right(),
+		} {
+			if h.Dist(startingdir) > 2 {
+				// turn is too sharp
+				possible = append(possible, nil)
+				continue
 			}
-			prevDir = dir
-			dir = newdir
+
+			dx, dy := h.RiseRun()
+			v := volc.Value(this.X()+dx, this.Y()+dy)
+			if v > lastVolc {
+				// reject flowing towards volcanoes
+				possible = append(possible, nil)
+				continue
+			}
+
+			possible = append(possible, &h)
+		}
+
+		// change direction left or right
+		if possible[0] == nil && possible[1] == nil && possible[2] == nil {
+			break // well, no where to go ..
+		} else if possible[0] == nil || float64(rand.Intn(int(100*riverTurnChance))) < riverTurnChance {
+			if possible[1] == nil && possible[2] != nil {
+				prevDir = dir
+				dir = *possible[2]
+			} else if possible[1] != nil && possible[2] == nil {
+				prevDir = dir
+				dir = *possible[1]
+			} else if possible[1] != nil && possible[2] != nil {
+				prevDir = dir
+				dir = *possible[rand.Intn(2)+1]
+			}
 		}
 
 		// figure out the next piece of the river
 		dx, dy := dir.RiseRun()
-		this := path[len(path)-1]
 		next := pix(this.X()+dx, this.Y()+dy, 255)
+		lastVolc = volc.Value(next.X(), next.Y())
 		path = append(path, next)
 
 		// decide new height of riverbed

@@ -17,20 +17,18 @@ type Config struct {
 }
 
 type volcSettings struct {
-	// number of geothermal regions (max)
-	Number uint
-
-	// how far from geothermal epicentre a region can extend
-	Radius float64
-
 	// variance used in radius calculation
 	Variance float64
 
-	// min dist volcanoes must have from each other
 	OriginMinDist float64
 
-	// at or over this value we consider volanic land lava
-	LavaOver uint8
+	LavaRadius uint8
+
+	VolcanicRedius uint8
+
+	Number uint
+
+	MaxRadius float64
 }
 
 type swampSettings struct {
@@ -165,11 +163,12 @@ func DefaultConfig() *Config {
 			SeaLevel: 115,
 		},
 		Volcanic: &volcSettings{
-			Number:        5,
-			Radius:        30,
-			Variance:      0.7,
-			OriginMinDist: 10,
-			LavaOver:      180,
+			Variance:       0.6,
+			LavaRadius:     18,
+			VolcanicRedius: 30,
+			OriginMinDist:  30,
+			Number:         5,
+			MaxRadius:      60,
 		},
 		Swamp: &swampSettings{
 			Number:      8,
