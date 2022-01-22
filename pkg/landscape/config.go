@@ -73,6 +73,9 @@ type riverSettings struct {
 	// This is essentially a hack to aid applications where maps require features to
 	// be straight on (facing the user) or away.
 	ForceNorthSouthSections bool
+
+	// TurnChance is how likely a river is to change direction on a given pixel
+	TurnChance float64
 }
 
 type seaSettings struct {
@@ -151,9 +154,10 @@ func DefaultConfig() *Config {
 			EquatorWidth:       0.05, // % of height
 		},
 		Rivers: &riverSettings{
-			Number:                  60,
+			Number:                  50,
 			OriginMinDist:           70,
 			ForceNorthSouthSections: true,
+			TurnChance:              0.3,
 		},
 		Land: &landSettings{
 			HeightVariance:   0.03, // base heightmap

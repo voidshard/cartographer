@@ -7,10 +7,6 @@ import (
 	"sort"
 )
 
-const (
-	riverTurnChance = 0.3
-)
-
 // determineRivers determines where our rivers will be, we return a new heightmap
 // & the map of rivers.
 // Rivers are sufficiently complicated that they seem worth their own file ..
@@ -52,6 +48,15 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, 
 	return out, rivermaps, pois
 }
 
+type candidate struct {
+	H      shapes.Heading
+	Reason string
+}
+
+func (c *candidate) Ok() bool {
+	return c.Reason == ""
+}
+
 // drawRiver determines a path a river will follow.
 // There's actually a lot of steps we want to do here, including smoothing the river path & surrounds,
 // determining the direction of the river, ensuring it stops if / when it merges with another river etc.
@@ -89,54 +94,55 @@ func drawRiver(hmap, out, sea, volc *MapImage, o *Pixel, cfg *riverSettings) (*M
 	dir := startingdir
 	missedDecrements := 0
 
-	lastVolc := volc.Value(o.X(), o.Y())
+	startVolc := volc.Value(o.X(), o.Y())
 
 	for {
 		this := path[len(path)-1]
 
-		possible := []*shapes.Heading{}
-		for _, h := range []shapes.Heading{
-			dir,
-			dir.Left(),
-			dir.Right(),
-		} {
-			if h.Dist(startingdir) > 2 {
+		possible := []*candidate{
+			&candidate{dir, ""},
+			&candidate{dir.Left(), ""},
+			&candidate{dir.Right(), ""},
+		}
+
+		for _, c := range possible {
+			if c.H.Dist(startingdir) > 2 {
 				// turn is too sharp
-				possible = append(possible, nil)
+				c.Reason = "sharp"
 				continue
 			}
 
-			dx, dy := h.RiseRun()
+			dx, dy := c.H.RiseRun()
 			v := volc.Value(this.X()+dx, this.Y()+dy)
-			if v > lastVolc {
+			if v > startVolc {
 				// reject flowing towards volcanoes
-				possible = append(possible, nil)
+				c.Reason = "volcanic"
 				continue
 			}
-
-			possible = append(possible, &h)
 		}
 
 		// change direction left or right
-		if possible[0] == nil && possible[1] == nil && possible[2] == nil {
+		if !possible[0].Ok() && !possible[1].Ok() && !possible[2].Ok() {
 			break // well, no where to go ..
-		} else if possible[0] == nil || float64(rand.Intn(int(100*riverTurnChance))) < riverTurnChance {
-			if possible[1] == nil && possible[2] != nil {
+		} else if !possible[0].Ok() || rand.Float64() < cfg.TurnChance {
+			if !possible[1].Ok() && possible[2].Ok() {
 				prevDir = dir
-				dir = *possible[2]
-			} else if possible[1] != nil && possible[2] == nil {
+				dir = possible[2].H
+			} else if possible[1].Ok() && !possible[2].Ok() {
 				prevDir = dir
-				dir = *possible[1]
-			} else if possible[1] != nil && possible[2] != nil {
+				dir = possible[1].H
+			} else if possible[1].Ok() && possible[2].Ok() {
 				prevDir = dir
-				dir = *possible[rand.Intn(2)+1]
+				dir = possible[rand.Intn(2)+1].H
+			} else if possible[0].Ok() {
+				prevDir = dir
+				dir = possible[0].H
 			}
 		}
 
 		// figure out the next piece of the river
 		dx, dy := dir.RiseRun()
 		next := pix(this.X()+dx, this.Y()+dy, 255)
-		lastVolc = volc.Value(next.X(), next.Y())
 		path = append(path, next)
 
 		// decide new height of riverbed
