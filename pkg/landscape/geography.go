@@ -198,9 +198,11 @@ func determineRainfall(hmap *MapImage, rs *rainfallSettings) *MapImage {
 //
 // This means we should lose 1c in temp from sealevel as we climb every 2 pts
 // of height. Well, more like 3c per 5 points but .. whatever.
-func determineTemp(hm *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
-	_, y := hm.Dimensions()
+func determineTemp(hm, volc *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
+	x, y := hm.Dimensions()
 	equator := y / 2
+
+	pmap := &MapImage{im: perlin.Perlin(x, y, cfg.Variance)}
 
 	// how wide the equator 'band' is
 	band := cfg.EquatorWidth * float64(y)
@@ -213,16 +215,32 @@ func determineTemp(hm *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
 
 		dueToY := 0.0
 		if dy > equator {
-			dueToY = float64(dy - equator)
+			dueToY = float64(dy-equator) * 0.85
 		} else {
-			dueToY = float64(equator - dy)
-		}
-		if dueToY <= band {
-			// we're inside the equator
-			return temp
+			dueToY = float64(equator-dy) * 0.85
 		}
 
-		return decrement(temp, toUint8(dueToY*dty))
+		ret := temp
+		if dueToY > band {
+			// we're inside the equator
+			ret = decrement(temp, toUint8(dueToY*dty))
+		}
+
+		if any(volc.Nearby(dx, dy, 10, false), func(p *Pixel) bool {
+			return p.V > 50
+		}) {
+			// volcanic activity raises surrounding temperature
+			ret = increment(ret, 10)
+		}
+
+		// add a bit of variation
+		pv := pmap.Value(dx, dy)
+		if pv < 125 {
+			ret = decrement(ret, (125-pv)/10)
+		} else {
+			ret = increment(ret, (pv-125)/10)
+		}
+		return ret
 	})
 }
 

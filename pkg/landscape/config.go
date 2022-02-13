@@ -6,6 +6,7 @@ type Config struct {
 	// base map height
 	Height uint
 
+	Lakes    *lakeSettings
 	Rain     *rainfallSettings
 	Temp     *tempSettings
 	Rivers   *riverSettings
@@ -16,18 +17,53 @@ type Config struct {
 	Biome    *biomeSettings
 }
 
+type lakeSettings struct {
+	// variance used in radius calculation
+	Variance float64
+
+	// range of values about the centre that are set as lake.
+	// Higher values imply wider less windy lakes.
+	// Low values produce streams, disconnected ponds / marshland
+	// type terrain.
+	Radius uint8
+
+	// max number of lakes (best effort)
+	Number uint
+
+	// max size of a lake -- how far it can extend from the centre.
+	// We make it increasingly less likely that lakes will extend over this
+	SoftMaxRadius float64
+
+	// hard max, lakes cannot go over this dist from the origin
+	HardMaxRadius float64
+
+	// lakes must form at least this far from the river origin
+	MinDistFromStart uint
+
+	// lakes must form at least this far from the river end
+	MinDistFromEnd uint
+}
+
 type volcSettings struct {
 	// variance used in radius calculation
 	Variance float64
 
+	// how far volcano (centres) have to be from each other
 	OriginMinDist float64
 
+	// range of values about the centre that imply lava.
+	// higher -> more lava
 	LavaRadius uint8
 
+	// range of values about the centre that imply volcanic land.
+	// Should be > LavaRadius
+	// higher values -> more volcanic land around lava edges
 	VolcanicRedius uint8
 
+	// max number of volcanoes (best effort)
 	Number uint
 
+	// max dist from the volcano centre lava / volcanic land can extend
 	MaxRadius float64
 }
 
@@ -54,6 +90,7 @@ type tempSettings struct {
 	EquatorAverageTemp uint8
 	PoleAverageTemp    uint8
 	EquatorWidth       float64
+	Variance           float64
 }
 
 type rainfallSettings struct {
@@ -134,9 +171,7 @@ func DefaultConfig() *Config {
 			FrozenTemp:          70,
 			DesertTemp:          20,
 			DesertRain:          40,
-			TundraTemp:          100,
-			TundraRainMin:       40,
-			TundraRainMax:       80,
+			TundraTemp:          80,
 			ForestTropicalTemp:  130,
 			ForestTropicalRain:  205,
 			ForestTemperateRain: 100,
@@ -145,6 +180,15 @@ func DefaultConfig() *Config {
 			MountainHeight:      210,
 			HighlandsHeight:     170,
 		},
+		Lakes: &lakeSettings{
+			Variance:         0.23,
+			Radius:           30,
+			Number:           4,
+			SoftMaxRadius:    40,
+			HardMaxRadius:    60,
+			MinDistFromStart: 15,
+			MinDistFromEnd:   30,
+		},
 		Rain: &rainfallSettings{
 			RainfallVariance: 0.03,
 		},
@@ -152,12 +196,13 @@ func DefaultConfig() *Config {
 			EquatorAverageTemp: 140,  // 40c
 			PoleAverageTemp:    60,   // -40c
 			EquatorWidth:       0.05, // % of height
+			Variance:           0.03,
 		},
 		Rivers: &riverSettings{
 			Number:                  50,
 			OriginMinDist:           70,
 			ForceNorthSouthSections: true,
-			TurnChance:              0.3,
+			TurnChance:              0.4,
 		},
 		Land: &landSettings{
 			HeightVariance:   0.03, // base heightmap
@@ -175,7 +220,7 @@ func DefaultConfig() *Config {
 			MaxRadius:      60,
 		},
 		Swamp: &swampSettings{
-			Number:      8,
+			Number:      10,
 			Radius:      100,
 			MaxHeight:   165,
 			DeltaHeight: 10,

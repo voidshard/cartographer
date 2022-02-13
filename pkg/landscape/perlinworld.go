@@ -22,18 +22,18 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	// modifies heightmap
 	// sadly, in order to run rivers to the sea, we have to know where the sea is
 	// we also want to avoid running through lava
-	rvrs, rivermaps, rpois := determineRivers(hmap, sea, volc, cfg.Rivers)
+	rvrs, rivermaps, rpois := determineRivers(hmap, sea, volc, cfg.Rivers, cfg.Lakes)
 	pois = append(pois, rpois...)
 
 	wg := sync.WaitGroup{}
-	wg.Add(4)
+	wg.Add(5)
 
 	plock := &sync.Mutex{}
 	var temp *MapImage
 	var rain *MapImage
 	var swmp *MapImage
 
-	go func() {
+	go func() { // locate mountains
 		defer wg.Done()
 		mountains := findMountains(hmap)
 		plock.Lock()
@@ -62,7 +62,7 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	}()
 	go func() {
 		defer wg.Done()
-		temp = determineTemp(hmap, cfg.Sea.SeaLevel, cfg.Temp)
+		temp = determineTemp(hmap, volc, cfg.Sea.SeaLevel, cfg.Temp)
 	}()
 	go func() {
 		defer wg.Done()

@@ -85,10 +85,7 @@ func (l *Landscape) determineBiomes(cfg *Config) {
 	})
 
 	eachPixel(out, func(dx, dy int, c uint8) {
-		if l.sea.Value(dx, dy) == 255 {
-			out.Set(dx, dy, seaColor)
-			return
-		} else if l.volcanic.Value(dx, dy) > 0 {
+		if l.volcanic.Value(dx, dy) > 0 {
 			out.Set(dx, dy, volcColor)
 			return
 		}
@@ -106,12 +103,15 @@ func (l *Landscape) determineBiomes(cfg *Config) {
 
 		if temp <= cfg.Biome.FrozenTemp {
 			out.Set(dx, dy, frozenColor)
+		} else if l.sea.Value(dx, dy) == 255 {
+			out.Set(dx, dy, seaColor)
+		} else if temp <= cfg.Biome.TundraTemp {
+			// tundra tends to be a thin band of nearly perma frozen land
+			out.Set(dx, dy, tundraColor)
 		} else if l.swamp.Value(dx, dy) == 255 || l.swamp.Value(dx, dy) == 120 {
 			out.Set(dx, dy, swampColor)
 		} else if temp >= cfg.Biome.DesertTemp && rain <= cfg.Biome.DesertRain {
 			out.Set(dx, dy, desertColor)
-		} else if temp <= cfg.Biome.TundraTemp && (rain >= cfg.Biome.TundraRainMin && rain <= cfg.Biome.TundraRainMax) {
-			out.Set(dx, dy, tundraColor)
 		} else if temp >= cfg.Biome.ForestTropicalTemp && rain >= cfg.Biome.ForestTropicalRain {
 			out.Set(dx, dy, forestTrpColor)
 		} else if temp >= cfg.Biome.ForestTemperateTemp && rain >= cfg.Biome.ForestTemperateRain {

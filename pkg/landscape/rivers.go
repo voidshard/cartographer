@@ -1,6 +1,7 @@
 package landscape
 
 import (
+	perlin "github.com/voidshard/cartographer/pkg/perlin"
 	"github.com/voidshard/cartographer/pkg/shapes"
 
 	"math/rand"
@@ -10,7 +11,7 @@ import (
 // determineRivers determines where our rivers will be, we return a new heightmap
 // & the map of rivers.
 // Rivers are sufficiently complicated that they seem worth their own file ..
-func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, []*MapImage, []*POI) {
+func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings, ls *lakeSettings) (*MapImage, []*MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 	out := NewMapImage(x, y)
 	out.SetBackground(0)
@@ -26,6 +27,9 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, 
 	shuffle(origins)
 
 	rivers := 0 // rivers we've accepted
+	lakes := 0  // lakes we've added
+
+	minLakeRiverLen := int(ls.MinDistFromStart) + int(ls.MinDistFromEnd)
 
 	for _, o := range origins {
 		if volc.Value(o.X(), o.Y()) > 120 {
@@ -34,7 +38,24 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, 
 		}
 
 		// draw in the river, expanding the outline (& respecting other rivers)
-		rvr, riverpois, _ := drawRiver(hmap, out, sea, volc, o, cfg)
+		rvr, riverpois, rpath := drawRiver(hmap, out, sea, volc, o, cfg)
+		if len(rpath) > minLakeRiverLen && lakes < int(ls.Number) {
+			// ie. as we get more lakes, new lakes become less likely
+			if rand.Intn(int(ls.Number)) > lakes {
+				continue
+			}
+
+			// we pick a random part of the river that is not too close
+			// to the end nor the start
+			idx := rand.Intn(len(rpath)-minLakeRiverLen) + int(ls.MinDistFromStart)
+
+			size := fillLake(hmap, sea, out, rvr, volc, rpath[idx], ls)
+			if size > 10 {
+				// if they're too small we don't count them as lakes ..
+				lakes++
+				pois = append(pois, &POI{X: rpath[idx].X(), Y: rpath[idx].Y(), Type: LakeOrigin})
+			}
+		}
 
 		pois = append(pois, riverpois...)
 		rivermaps = append(rivermaps, rvr)
@@ -46,6 +67,97 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings) (*MapImage, 
 	}
 
 	return out, rivermaps, pois
+}
+
+// fillLake draws in a lake given it's origin point (on some river).
+// We're allowed to touch pixels adjacent to our own river (expanding it)
+// but we can't join other rivers (because we'd then have a lake with
+// more than one exit river .. which is really weird).
+func fillLake(hmap, sea, rvrs, rvr, volc *MapImage, o *Pixel, ls *lakeSettings) int {
+	x, y := hmap.Dimensions()
+
+	pmap := &MapImage{im: perlin.Perlin(x, y, ls.Variance)}
+	pv := pmap.Value(o.X(), o.Y())
+
+	pmax := increment(pv, ls.Radius)
+	pmin := decrement(pv, ls.Radius)
+
+	seen := map[int]bool{}
+	check := []*Pixel{o}
+	lakeBed := hmap.Value(o.X(), o.Y())
+	startVolc := volc.Value(o.X(), o.Y())
+
+	size := 0
+
+	for {
+		if len(check) == 0 {
+			break
+		}
+
+		me := check[len(check)-1]
+		check = check[:len(check)-1] // slice off the last element
+
+		rvr.SetValue(me.X(), me.Y(), 255)
+		rvrs.SetValue(me.X(), me.Y(), 255)
+		size++
+
+		currentH := hmap.Value(me.X(), me.Y())
+		if currentH > lakeBed {
+			newh := decrement(currentH, uint8(rand.Intn(3)))
+			hmap.SetValue(me.X(), me.Y(), newh)
+		} else if currentH < lakeBed {
+			lakeBed = currentH
+		}
+
+		candidates := []*Pixel{}
+		for _, next := range pmap.Nearby(me.X(), me.Y(), 2, false) {
+			// check / record we've been here
+			idx := int(next.X())*y + int(next.Y())
+			done, _ := seen[idx]
+			if done {
+				continue
+			}
+			seen[idx] = true
+
+			// we have two 'reject' cases; where the whole set of pixels
+			// are too close to something invalid (volcano, sea, another river),
+			// and where the tile itself is invalid (dist, perlin mismatch).
+			// If we reject a pixel we'll keep looking at further pixels.
+			// If we 'greater' reject then this whole set will be thrown out.
+			if sea.Value(next.X(), next.Y()) == 255 {
+				candidates = []*Pixel{}
+				break
+			}
+			if volc.Value(next.X(), next.Y()) > startVolc {
+				candidates = []*Pixel{}
+				break
+			}
+			if rvrs.Value(next.X(), next.Y()) == 255 && rvr.Value(next.X(), next.Y()) != 255 {
+				// we're in a river that is *not* us
+				candidates = []*Pixel{}
+				break
+			}
+
+			// rather than hard stopping at the radius, we'll allow it to phase out
+			dist := o.Point.DistPt(next.Point)
+			if dist > ls.HardMaxRadius {
+				continue
+			}
+			effectPv := next.V
+			if dist > ls.SoftMaxRadius {
+				effectPv = increment(effectPv, uint8(2*dist-ls.SoftMaxRadius))
+			}
+			if effectPv > pmax || effectPv < pmin {
+				continue // perlin map says no
+			}
+
+			candidates = append(candidates, next)
+		}
+
+		check = append(check, candidates...)
+	}
+
+	return size
 }
 
 type candidate struct {
