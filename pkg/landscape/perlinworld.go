@@ -26,7 +26,7 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	pois = append(pois, rpois...)
 
 	wg := sync.WaitGroup{}
-	wg.Add(5)
+	wg.Add(4)
 
 	plock := &sync.Mutex{}
 	var temp *MapImage
