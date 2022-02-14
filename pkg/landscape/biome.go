@@ -69,21 +69,6 @@ func (l *Landscape) determineBiomes(cfg *Config) {
 	x, y := l.rivers.Dimensions()
 	out := NewMapImage(x, y)
 
-	eachPixel(l.rivers, func(dx, dy int, _ uint8) {
-		if l.sea.Value(dx, dy) == 255 || l.swamp.Value(dx, dy) > 0 || l.volcanic.Value(dx, dy) > 0 {
-			out.SetValue(dx, dy, 0)
-			return
-		}
-
-		near := l.rivers.Nearby(dx, dy, int(cfg.Biome.FreshWaterRadius), true)
-
-		if any(near, func(p *Pixel) bool { return p.V == 255 }) {
-			out.SetValue(dx, dy, 255)
-		} else {
-			out.SetValue(dx, dy, 0)
-		}
-	})
-
 	eachPixel(out, func(dx, dy int, c uint8) {
 		if l.volcanic.Value(dx, dy) > 0 {
 			out.Set(dx, dy, volcColor)
@@ -97,19 +82,21 @@ func (l *Landscape) determineBiomes(cfg *Config) {
 		temp = decrement(temp, aboveSea/5)
 
 		rain := l.rainfall.Value(dx, dy)
-		if out.Value(dx, dy) == 255 {
-			rain = 255 // freshwater bump
-		}
 
 		if temp <= cfg.Biome.FrozenTemp {
 			out.Set(dx, dy, frozenColor)
 		} else if l.sea.Value(dx, dy) == 255 {
 			out.Set(dx, dy, seaColor)
+		} else if l.swamp.Value(dx, dy) == 255 || l.swamp.Value(dx, dy) == 120 {
+			// swamp takes precedence over tundra as slightly warmer tundra appears
+			// swamp-ish (eg "plains tundra") .. or water logged regions with no trees
+			// since their roots cannot sink into permafrost .. though during the summer
+			// months enough water does melt to pool in shallow bogs.
+			// https://www.youtube.com/watch?v=NL95ehsFb-4
+			out.Set(dx, dy, swampColor)
 		} else if temp <= cfg.Biome.TundraTemp {
 			// tundra tends to be a thin band of nearly perma frozen land
 			out.Set(dx, dy, tundraColor)
-		} else if l.swamp.Value(dx, dy) == 255 || l.swamp.Value(dx, dy) == 120 {
-			out.Set(dx, dy, swampColor)
 		} else if temp >= cfg.Biome.DesertTemp && rain <= cfg.Biome.DesertRain {
 			out.Set(dx, dy, desertColor)
 		} else if temp >= cfg.Biome.ForestTropicalTemp && rain >= cfg.Biome.ForestTropicalRain {

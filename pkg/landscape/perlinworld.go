@@ -1,46 +1,68 @@
 package landscape
 
 import (
+	"log"
 	"sync"
+	"time"
 
 	perlin "github.com/voidshard/cartographer/pkg/perlin"
 )
 
+func timer(in string) func() {
+	start := time.Now()
+
+	return func() {
+		end := time.Now()
+		log.Println(in, "took", end.Sub(start))
+	}
+}
+
 // PerlinLandscape generates our maps from simple perlin noise & some basic math / combinations
 func PerlinLandscape(cfg *Config) (*Landscape, error) {
+	t := timer("heightmap")
 	hmap := combine(
 		weight(perlin.Perlin(int(cfg.Width), int(cfg.Height), cfg.Land.HeightVariance), 70),
 		weight(perlin.Perlin(int(cfg.Width), int(cfg.Height), cfg.Land.MountainVariance), 30),
 	)
+	t()
 
 	// modifies heightmap
-	volc, pois := determineGeothermal(hmap, cfg.Sea.SeaLevel, cfg.Volcanic)
+	t = timer("geothermal")
+	// nb. geothermal outputs the temperature map because this greatly decreases
+	// our later workload increasing temperature near volcanic land
+	volc, temp, pois := determineGeothermal(hmap, cfg.Sea.SeaLevel, cfg.Volcanic)
+	t()
 
 	// modifies heightmap
+	t = timer("sea")
 	sea := determineSea(hmap, cfg.Sea)
+	t()
 
 	// modifies heightmap
 	// sadly, in order to run rivers to the sea, we have to know where the sea is
 	// we also want to avoid running through lava
-	rvrs, rivermaps, rpois := determineRivers(hmap, sea, volc, cfg.Rivers, cfg.Lakes)
+	t = timer("rivers")
+	rvrs, rivermaps, rain, rpois := determineRivers(hmap, sea, volc, cfg.Rivers, cfg.Lakes)
 	pois = append(pois, rpois...)
+	t()
 
 	wg := sync.WaitGroup{}
 	wg.Add(4)
 
 	plock := &sync.Mutex{}
-	var temp *MapImage
-	var rain *MapImage
 	var swmp *MapImage
 
 	go func() { // locate mountains
+		tm := timer("mountains")
 		defer wg.Done()
 		mountains := findMountains(hmap)
 		plock.Lock()
 		defer plock.Unlock()
 		pois = append(pois, mountains...)
+		tm()
 	}()
 	go func() {
+		ts := timer("swamp")
 		defer wg.Done()
 
 		// we'll look at putting swamps at the ends of rivers
@@ -59,14 +81,19 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 		plock.Lock()
 		defer plock.Unlock()
 		pois = append(pois, spois...)
+		ts()
 	}()
 	go func() {
+		tt := timer("temperature")
 		defer wg.Done()
-		temp = determineTemp(hmap, volc, cfg.Sea.SeaLevel, cfg.Temp)
+		determineTemp(hmap, temp, cfg.Sea.SeaLevel, cfg.Temp)
+		tt()
 	}()
 	go func() {
+		tr := timer("rainfall")
 		defer wg.Done()
-		rain = determineRainfall(hmap, cfg.Rain)
+		determineRainfall(hmap, rain, cfg.Rain)
+		tr()
 	}()
 	wg.Wait()
 
@@ -83,7 +110,9 @@ func PerlinLandscape(cfg *Config) (*Landscape, error) {
 	}
 
 	// finally, using everything else, bucket areas into biomes
+	t = timer("biomes")
 	l.determineBiomes(cfg)
+	t()
 
 	return l, nil
 }

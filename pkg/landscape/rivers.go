@@ -11,16 +11,19 @@ import (
 // determineRivers determines where our rivers will be, we return a new heightmap
 // & the map of rivers.
 // Rivers are sufficiently complicated that they seem worth their own file ..
-func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings, ls *lakeSettings) (*MapImage, []*MapImage, []*POI) {
+func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings, ls *lakeSettings) (*MapImage, []*MapImage, *MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 	out := NewMapImage(x, y)
 	out.SetBackground(0)
+
+	rain := NewMapImage(x, y)
+	rain.SetBackground(0)
 
 	rivermaps := []*MapImage{}
 	pois := []*POI{}
 
 	if cfg.Number < 1 {
-		return out, rivermaps, pois
+		return out, rivermaps, rain, pois
 	}
 
 	origins := riverOrigins(hmap, cfg) // places where a river might start
@@ -38,7 +41,7 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings, ls *lakeSett
 		}
 
 		// draw in the river, expanding the outline (& respecting other rivers)
-		rvr, riverpois, rpath := drawRiver(hmap, out, sea, volc, o, cfg)
+		rvr, riverpois, rpath := drawRiver(hmap, out, rain, sea, volc, o, cfg)
 		if len(rpath) > minLakeRiverLen && lakes < int(ls.Number) {
 			// ie. as we get more lakes, new lakes become less likely
 			if rand.Intn(int(ls.Number)) > lakes {
@@ -66,7 +69,7 @@ func determineRivers(hmap, sea, volc *MapImage, cfg *riverSettings, ls *lakeSett
 		}
 	}
 
-	return out, rivermaps, pois
+	return out, rivermaps, rain, pois
 }
 
 // fillLake draws in a lake given it's origin point (on some river).
@@ -174,7 +177,7 @@ func (c *candidate) Ok() bool {
 // determining the direction of the river, ensuring it stops if / when it merges with another river etc.
 // Rather than go over the river path multiple times (as previously) we're going to attempt to do this
 // all at once & save on re-going over the path multiple times.
-func drawRiver(hmap, out, sea, volc *MapImage, o *Pixel, cfg *riverSettings) (*MapImage, []*POI, []*Pixel) {
+func drawRiver(hmap, out, rain, sea, volc *MapImage, o *Pixel, cfg *riverSettings) (*MapImage, []*POI, []*Pixel) {
 	x, y := hmap.Dimensions()
 
 	pois := []*POI{&POI{X: o.X(), Y: o.Y(), Type: RiverOrigin}}
@@ -289,6 +292,11 @@ func drawRiver(hmap, out, sea, volc *MapImage, o *Pixel, cfg *riverSettings) (*M
 		rvr.SetValue(next.X(), next.Y(), 255)
 		out.SetValue(next.X(), next.Y(), 255)
 		hmap.SetValue(next.X(), next.Y(), riverbed)
+
+		for _, near := range rvr.Nearby(next.X(), next.Y(), 10, true) {
+			// up rain / fresh water map since .. there's fresh water
+			rain.SetValue(near.X(), near.Y(), 50)
+		}
 
 		// figure out if we're merging with another river
 		touchesRiver := pixelsBetween(

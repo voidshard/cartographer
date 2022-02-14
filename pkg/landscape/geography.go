@@ -40,48 +40,79 @@ func determineSwamp(hmap, rivers, sea *MapImage, ss *swampSettings, riverends []
 
 	per := &MapImage{im: perlin.Perlin(x, y, ss.Variance)}
 
-	for i, start := range riverends {
-		if i > int(ss.Number) {
+	for _, start := range riverends {
+		if uint(len(pois)) >= ss.Number {
 			break
 		}
-		oh := int(hmap.Value(start.X, start.Y))
-		pois = append(pois, &POI{X: start.X, Y: start.Y, Type: Swamp})
 
-		for dy := start.Y - int(ss.Radius)/2; dy < start.Y+int(ss.Radius)/2; dy++ {
-			for dx := start.X - int(ss.Radius)/2; dx < start.X+int(ss.Radius)/2; dx++ {
-				h := int(hmap.Value(dx, dy))
-				if h > int(ss.MaxHeight) {
+		oh := hmap.Value(start.X, start.Y)
+		if oh >= ss.MaxHeight {
+			continue
+		}
+
+		maxH := increment(oh, ss.Radius)
+		minH := decrement(oh, ss.Radius)
+
+		size := 0
+		seen := map[int]bool{}
+		check := []*Pixel{pix(start.X, start.Y, uint8(oh))}
+
+		for {
+			if len(check) == 0 {
+				break
+			}
+
+			me := check[len(check)-1]
+			check = check[:len(check)-1] // slice off the last element
+			seen[int(me.X())*y+int(me.Y())] = true
+
+			pv := per.Value(me.X(), me.Y())
+			if pv%5 == 0 {
+				// swamp water
+				smap.SetValue(me.X(), me.Y(), 255)
+			} else {
+				// swampy land
+				smap.SetValue(me.X(), me.Y(), 120)
+			}
+			size += 1
+
+			for _, next := range hmap.Nearby(me.X(), me.Y(), 1, false) {
+				idx := int(next.X())*y + int(next.Y())
+
+				done, _ := seen[idx]
+				if done {
+					continue
+				}
+				seen[idx] = true
+
+				h := next.V
+				if h > ss.MaxHeight {
 					// swamps must be below max height
 					continue
 				}
-				if h >= oh+int(ss.DeltaHeight) || h < oh-int(ss.DeltaHeight) {
+				if h > maxH || h < minH {
 					// swamp areas must be within some height of each other
 					// (reasonably flat)
 					continue
 				}
-
-				if sea.Value(dx, dy) != 0 || rivers.Value(dx, dy) != 0 {
+				if sea.Value(next.X(), next.Y()) != 0 || rivers.Value(next.X(), next.Y()) != 0 {
 					// skip sea/river
 					continue
 				}
 
-				pv := per.Value(dx, dy)
-				if pv%5 == 0 {
-					// swamp water
-					smap.SetValue(dx, dy, 255)
-				} else {
-					// swampy land
-					smap.SetValue(dx, dy, 120)
-				}
+				check = append(check, next)
 			}
 		}
 
+		if size > 20 {
+			pois = append(pois, &POI{X: start.X, Y: start.Y, Type: Swamp})
+		}
 	}
 
 	return smap, pois
 }
 
-func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*MapImage, []*POI) {
+func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*MapImage, *MapImage, []*POI) {
 	x, y := hmap.Dimensions()
 
 	// new blank map
@@ -89,10 +120,13 @@ func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*Map
 	vmap.SetBackground(0)
 	pois := []*POI{}
 
+	temp := NewMapImage(x, y)
+	temp.SetBackground(0)
+
 	// pick some places to place volcanoes
 	origins := geothermalOrigins(hmap, vs)
 	if len(origins) == 0 {
-		return vmap, pois
+		return vmap, temp, pois
 	}
 
 	pmap := &MapImage{im: perlin.Perlin(x, y, vs.Variance)}
@@ -133,6 +167,11 @@ func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*Map
 				vmap.SetValue(me.X(), me.Y(), 255)
 			}
 
+			temp.SetValue(me.X(), me.Y(), 10)
+			for _, near := range pmap.Nearby(me.X(), me.Y(), 10, false) {
+				temp.SetValue(near.X(), near.Y(), 10)
+			}
+
 			check = check[:len(check)-1] // slice off the last element
 			for _, next := range pmap.Cardinals(me.X(), me.Y(), 1) {
 				if next.V > vrMax || next.V < vrMin {
@@ -145,19 +184,19 @@ func determineGeothermal(hmap *MapImage, sealevel uint8, vs *volcSettings) (*Map
 				if done { // we've done this so ignore
 					continue
 				}
+				seen[idx] = true
 
 				dist := volcano.Point.DistPt(next.Point)
 				if dist > vs.MaxRadius { // too far from volc centre
 					continue
 				}
 
-				seen[idx] = true
 				check = append(check, next)
 			}
 		}
 	}
 
-	return vmap, pois
+	return vmap, temp, pois
 }
 
 // geothermalOrigins figures out where we can put volcanoes.
@@ -177,9 +216,18 @@ func geothermalOrigins(hmap *MapImage, cfg *volcSettings) []*Pixel {
 
 // determineRainfall returns rainfall 0-255
 // TODO; include rain shadowing, consider prevailing winds
-func determineRainfall(hmap *MapImage, rs *rainfallSettings) *MapImage {
+func determineRainfall(hmap, rain *MapImage, rs *rainfallSettings) {
 	x, y := hmap.Dimensions()
-	return &MapImage{im: perlin.Perlin(x, y, rs.RainfallVariance)}
+
+	pmap := &MapImage{im: perlin.Perlin(x, y, rs.RainfallVariance)}
+
+	for dx := 0; dx < x; dx++ {
+		for dy := 0; dy < y; dy++ {
+			now := rain.Value(dx, dy)
+			now = increment(now, pmap.Value(dx, dy))
+			rain.SetValue(dx, dy, now)
+		}
+	}
 }
 
 // determineTemp returns a map of average temperatures in degrees Celcius,
@@ -198,7 +246,7 @@ func determineRainfall(hmap *MapImage, rs *rainfallSettings) *MapImage {
 //
 // This means we should lose 1c in temp from sealevel as we climb every 2 pts
 // of height. Well, more like 3c per 5 points but .. whatever.
-func determineTemp(hm, volc *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
+func determineTemp(hm, out *MapImage, sealevel uint8, cfg *tempSettings) *MapImage {
 	x, y := hm.Dimensions()
 	equator := y / 2
 
@@ -210,38 +258,39 @@ func determineTemp(hm, volc *MapImage, sealevel uint8, cfg *tempSettings) *MapIm
 	// difference in temp per pixel as we move out from the equator
 	dty := float64(cfg.EquatorAverageTemp-cfg.PoleAverageTemp) / ((float64(y) - band) / 2)
 
-	return mutateImage(hm, func(dx, dy int, z uint8) uint8 {
-		temp := cfg.EquatorAverageTemp
+	for dx := 0; dx < x; dx++ {
+		for dy := 0; dy < y; dy++ {
+			temp := cfg.EquatorAverageTemp
 
-		dueToY := 0.0
-		if dy > equator {
-			dueToY = float64(dy-equator) * 0.85
-		} else {
-			dueToY = float64(equator-dy) * 0.85
-		}
+			// add temp for volcanic region
+			temp = increment(temp, out.Value(dx, dy))
 
-		ret := temp
-		if dueToY > band {
-			// we're inside the equator
-			ret = decrement(temp, toUint8(dueToY*dty))
-		}
+			dueToY := 0.0
+			if dy > equator {
+				dueToY = float64(dy-equator) * 0.85
+			} else {
+				dueToY = float64(equator-dy) * 0.85
+			}
 
-		if any(volc.Nearby(dx, dy, 10, false), func(p *Pixel) bool {
-			return p.V > 50
-		}) {
-			// volcanic activity raises surrounding temperature
-			ret = increment(ret, 10)
-		}
+			ret := temp
+			if dueToY > band {
+				// we're inside the equator
+				ret = decrement(temp, toUint8(dueToY*dty))
+			}
 
-		// add a bit of variation
-		pv := pmap.Value(dx, dy)
-		if pv < 125 {
-			ret = decrement(ret, (125-pv)/10)
-		} else {
-			ret = increment(ret, (pv-125)/10)
+			// add a bit of variation
+			pv := pmap.Value(dx, dy)
+			if pv < 125 {
+				ret = decrement(ret, (125-pv)/10)
+			} else {
+				ret = increment(ret, (pv-125)/10)
+			}
+
+			out.SetValue(dx, dy, ret)
 		}
-		return ret
-	})
+	}
+
+	return out
 }
 
 // determineSea returns all areas that should be regarded as sea.

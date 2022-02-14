@@ -71,14 +71,11 @@ type swampSettings struct {
 	// number of swamp regions (max)
 	Number uint
 
-	// how large swamps can get
-	Radius float64
-
 	// swamps must exist below this height
-	MaxHeight uint
+	MaxHeight uint8
 
 	// max height +/- across a swamp
-	DeltaHeight uint
+	Radius uint8
 
 	// variance used in swamp outlines
 	Variance float64
@@ -220,11 +217,10 @@ func DefaultConfig() *Config {
 			MaxRadius:      60,
 		},
 		Swamp: &swampSettings{
-			Number:      10,
-			Radius:      100,
-			MaxHeight:   165,
-			DeltaHeight: 10,
-			Variance:    0.8,
+			Number:    25,
+			MaxHeight: 185,
+			Radius:    20,
+			Variance:  0.8,
 		},
 	}
 }
